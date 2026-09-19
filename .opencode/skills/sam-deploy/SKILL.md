@@ -36,9 +36,11 @@ sam deploy                         # later deploys reuse samconfig.toml
 - Lambda: Node 22 runtime, `POST /explain` via HttpApi event.
 - S3 uploads bucket with lifecycle rule `ExpirationInDays: 1` (24h).
 - DynamoDB table `saral-results` (partition key `id`, on-demand billing).
-- Lambda execution role: least privilege — `bedrock:InvokeModel` (scoped to
-  the chosen model ARN), `s3:PutObject/GetObject` (uploads bucket only),
-  `dynamodb:PutItem/GetItem` (results table only).
+- Lambda execution role: least privilege — `s3:PutObject/GetObject`
+  (uploads bucket only), `dynamodb:PutItem/GetItem` (results table only).
+  No Bedrock policy: the model call goes to Google Gemini over HTTPS;
+  the key arrives via the `GeminiApiKey` SAM parameter
+  (`sam deploy --parameter-overrides GeminiApiKey=...`).
 - CloudFront distribution in front of `web/` build output (S3 origin).
 
 ## Troubleshooting
@@ -47,9 +49,9 @@ sam deploy                         # later deploys reuse samconfig.toml
 |---|---|
 | `sam local` → cannot connect to Docker | `export DOCKER_HOST=...` (above); check `systemctl --user status podman.socket` |
 | `sam deploy` → requires capabilities | add `--capabilities CAPABILITY_IAM` |
-| `sam deploy` → Bedrock AccessDenied | model access not granted in `us-east-1`; Bedrock console → Model access |
+| `sam deploy` → missing parameter | pass `--parameter-overrides GeminiApiKey=...` |
 | 403 from API Gateway | check HttpApi route + Lambda resource policy |
-| Costs | Lambda/S3/DynamoDB free tiers + pennies of Bedrock; well under $100 |
+| Costs | Lambda/S3/DynamoDB free tiers + Gemini free tier; well under $100 |
 
 Never print or commit credentials. Verify deploys read-only first
 (`aws cloudformation describe-stacks`, `aws lambda get-function`).

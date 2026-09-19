@@ -6,7 +6,7 @@ description: Saral hackathon build workflow — the 4 Master-Prompt phases (scaf
 # Saral Workflow
 
 Saral: user uploads a photo of an official document, picks a language
-(Telugu/Hindi/English), backend sends the image to Amazon Bedrock and
+(Telugu/Hindi/English), backend sends the image to Google Gemini and
 returns JSON `{summary, what_it_means, actions[{step, deadline}], draft_reply}`.
 Each result is saved in DynamoDB. Frontend is mobile-first, big buttons,
 one screen, loading state, "read aloud" via the browser Speech API.
@@ -23,7 +23,7 @@ one screen, loading state, "read aloud" via the browser Speech API.
 
 - Get ONE flow working end to end before adding anything else.
 - Commit small and often, with clear messages (`git add` only intended files).
-- Never hardcode secrets. Use env vars + `.env.example` (see `bedrock-explain`).
+- Never hardcode secrets. Use env vars + `.env.example` (see `gemini-explain`).
 - Keep files simple. Explain briefly what changed after each step.
 - Every feature runs locally first, then `sam deploy`.
 - README must list AWS services used AND disclose AI coding tools used.

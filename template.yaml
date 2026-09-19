@@ -1,17 +1,24 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: Saral — explains official documents in regional languages (phase 1 scaffold)
+Description: Saral — explains official documents in regional languages
+
+Parameters:
+  GeminiApiKey:
+    Type: String
+    NoEcho: true
+    Description: Google AI Studio API key for the Gemini model call (never commit it)
 
 Globals:
   Function:
     Runtime: nodejs22.x
-    Timeout: 30
+    Timeout: 60
     MemorySize: 512
     Environment:
       Variables:
         RESULTS_TABLE: !Ref ResultsTable
         UPLOADS_BUCKET: !Ref UploadsBucket
-        BEDROCK_MODEL_ID: anthropic.claude-sonnet-4-5-20250929-v1:0
+        GEMINI_MODEL: gemini-3.6-flash
+        GEMINI_API_KEY: !Ref GeminiApiKey
 
 Resources:
   SaralHttpApi:
@@ -45,10 +52,6 @@ Resources:
             TableName: !Ref ResultsTable
         - S3CrudPolicy:
             BucketName: !Ref UploadsBucket
-        - Statement:
-            - Effect: Allow
-              Action: bedrock:InvokeModel
-              Resource: !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/anthropic.claude-sonnet-*'
 
   UploadsBucket:
     Type: AWS::S3::Bucket
