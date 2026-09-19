@@ -6,10 +6,10 @@ description: Saral's Gemini integration — call generateContent with a document
 # Gemini Explain (`POST /explain`)
 
 Provider: Google Gemini REST API (direct HTTPS from Lambda/local, no SDK).
-Model default: `gemini-3.6-flash` (vision + structured JSON; verified live
-2026-09-19). Override via `GEMINI_MODEL` env var (`gemini-3.7-flash` also
-live; `gemini-3.8-flash` 503-prone under load; `gemini-2.5-flash` retired
-for new users). Auth: `x-goog-api-key: <GEMINI_API_KEY>` header.
+Model default: `gemini-3.7-flash` (vision + structured JSON; verified live
+2026-09-19). Override via `GEMINI_MODEL` env var (`gemini-3.6-flash` also
+live but 503-prone under load; `gemini-2.5-flash` retired for new users).
+Auth: `x-goog-api-key: <GEMINI_API_KEY>` header.
 
 Endpoint: `POST https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent`
 
@@ -21,7 +21,7 @@ Endpoint: `POST https://generativelanguage.googleapis.com/v1beta/models/{model}:
   "contents": [{
     "role": "user",
     "parts": [
-      { "inline_data": { "mime_type": "image/png|image/jpeg", "data": "<base64>" } },
+      { "inline_data": { "mime_type": "image/png|image/jpeg|application/pdf", "data": "<base64>" } },
       { "text": "<instruction incl. output language>" }
     ]
   }],
@@ -34,8 +34,9 @@ Endpoint: `POST https://generativelanguage.googleapis.com/v1beta/models/{model}:
 }
 ```
 
-- Multimodal message: text prompt + image bytes (JPEG/PNG from the upload).
-  Inline data keeps total request < 20 MB — our 5 MB cap is fine.
+- Multimodal message: text prompt + file bytes — JPEG/PNG photos or a PDF
+  document (`%PDF-` magic → `application/pdf`). Inline data keeps total
+  request < 20 MB — our 5 MB cap is fine (and fits the API Gateway body limit).
 - `language` param (`te`/`hi`/`en`) selects output language. Telugu and
   Hindi answers in native script. `draft_reply` is always in the SAME
   language the user picked.
@@ -62,7 +63,7 @@ summary, what_it_means, actions[], draft_reply, imageKey, modelId`.
 
 ```
 GEMINI_API_KEY=<google-ai-studio-key>
-GEMINI_MODEL=gemini-3.6-flash
+GEMINI_MODEL=gemini-3.7-flash
 AWS_REGION=us-east-1
 RESULTS_TABLE=saral-results
 UPLOADS_BUCKET=saral-uploads-<account-id>

@@ -11,7 +11,7 @@ for later. Mobile-first, one screen, with read-aloud.
 - Backend: Hono (TypeScript) on AWS Lambda (`api/`)
 - Infra (AWS SAM, `template.yaml`): API Gateway (HTTP API), Lambda, S3
   (uploads, 24h lifecycle), DynamoDB (`saral-results`)
-- Model: Google Gemini (`gemini-3.6-flash`, vision + structured JSON via
+- Model: Google Gemini (`gemini-3.7-flash`, vision + structured JSON via
   direct REST; free AI Studio key in `GEMINI_API_KEY`)
 
 ## Run locally

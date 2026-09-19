@@ -27,7 +27,7 @@ const LANGUAGE_NAMES: Record<Language, string> = {
 }
 
 const region = process.env.AWS_REGION ?? 'us-east-1'
-const modelId = process.env.GEMINI_MODEL ?? 'gemini-3.6-flash'
+const modelId = process.env.GEMINI_MODEL ?? 'gemini-3.7-flash'
 const tableName = process.env.RESULTS_TABLE ?? 'saral-results'
 
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({ region }))
@@ -70,10 +70,17 @@ const RESPONSE_SCHEMA = {
   required: ['summary', 'what_it_means', 'actions', 'draft_reply'],
 } as const
 
-function detectImageFormat(bytes: Uint8Array): 'image/png' | 'image/jpeg' {
+function detectFileType(bytes: Uint8Array): 'image/png' | 'image/jpeg' | 'application/pdf' {
   if (bytes[0] === 0x89 && bytes[1] === 0x50) return 'image/png'
   if (bytes[0] === 0xff && bytes[1] === 0xd8) return 'image/jpeg'
-  throw new Error('unsupported image format (use PNG or JPEG)')
+  if (
+    bytes[0] === 0x25 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x44 &&
+    bytes[3] === 0x46
+  )
+    return 'application/pdf' // %PDF-
+  throw new Error('unsupported file type (use PNG, JPEG, or PDF)')
 }
 
 function buildSystemPrompt(): string {
@@ -87,7 +94,7 @@ function buildSystemPrompt(): string {
 function buildUserText(language: Language): string {
   const lang = LANGUAGE_NAMES[language]
   return [
-    'The user uploaded a photo of an official document.',
+    'The user uploaded an official document (a photo or a PDF).',
     `Respond in ${lang}. The draft_reply must also be in ${lang}.`,
   ].join(' ')
 }
@@ -181,7 +188,7 @@ export async function explainDocument(
   imageBytes: Uint8Array,
   language: Language,
 ): Promise<ExplainResult> {
-  const mime = detectImageFormat(imageBytes)
+  const mime = detectFileType(imageBytes)
   const imageB64 = Buffer.from(imageBytes).toString('base64')
   const userText = buildUserText(language)
 

@@ -22,7 +22,7 @@ app.post('/explain', async (c) => {
     language?: unknown
   }
   if (typeof imageBase64 !== 'string' || imageBase64.length === 0) {
-    return c.json({ error: 'imageBase64 (PNG/JPEG) is required' }, 400)
+    return c.json({ error: 'imageBase64 (PNG/JPEG/PDF) is required' }, 400)
   }
   if (language !== 'te' && language !== 'hi' && language !== 'en') {
     return c.json({ error: "language must be one of 'te', 'hi', 'en'" }, 400)
