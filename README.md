@@ -1,13 +1,13 @@
 # Saral — official documents, explained in your language
 
-Upload a photo of an official document, pick Telugu / Hindi / English, and get
+Upload a photo or PDF of an official document, pick Telugu / Hindi / English, and get
 back a simple explanation: what it says, what it means for you, what to do
 next (with deadlines), plus a ready-to-send draft reply. Results are saved
 for later. Mobile-first, one screen, with read-aloud.
 
 ## Stack
 
-- Frontend: React + Vite + Tailwind (`web/`)
+- Frontend: React + Vite + Tailwind + shadcn/ui (`web/`)
 - Backend: Hono (TypeScript) on AWS Lambda (`api/`)
 - Infra (AWS SAM, `template.yaml`): API Gateway (HTTP API), Lambda, S3
   (uploads, 24h lifecycle), DynamoDB (`saral-results`)
@@ -17,8 +17,8 @@ for later. Mobile-first, one screen, with read-aloud.
 ## Run locally
 
 ```bash
-# API (http://localhost:3001/health)
-cd api && npm install && npm run dev
+# API (http://localhost:3001/health) — needs GEMINI_API_KEY, see .env.example
+cd api && npm install && set -a && source .env && set +a && npm run dev
 
 # Web (http://localhost:5173, /api/* proxied to :3001)
 cd web && npm install && npm run dev
