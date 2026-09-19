@@ -1,0 +1,12 @@
+Read AGENTS.md. Build "Saral": user uploads a photo of an official document
+and picks a language (Telugu/Hindi/English). The backend sends the image to
+Amazon Bedrock and returns JSON: {summary, what_it_means, actions[{step, deadline}],
+draft_reply}. Save each result in DynamoDB. Frontend: mobile-first, big buttons,
+one screen, loading state, a "read aloud" button using the browser's speech API.
+
+Do it in phases and stop after each for me to test:
+1. Scaffold monorepo (web/, api/, template.yaml for SAM) + README
+2. Hono API with POST /explain, run locally with a sample image
+3. React frontend connected to the API
+4. SAM deploy: Lambda, API Gateway, S3 (24h lifecycle), DynamoDB, CloudFront
+Start with phase 1 only.

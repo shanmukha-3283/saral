@@ -1,0 +1,81 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Saral — explains official documents in regional languages (phase 1 scaffold)
+
+Globals:
+  Function:
+    Runtime: nodejs22.x
+    Timeout: 30
+    MemorySize: 512
+    Environment:
+      Variables:
+        RESULTS_TABLE: !Ref ResultsTable
+        UPLOADS_BUCKET: !Ref UploadsBucket
+        BEDROCK_MODEL_ID: anthropic.claude-sonnet-4-5-20250929-v1:0
+
+Resources:
+  SaralHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins: ['*']
+        AllowMethods: ['GET', 'POST', 'OPTIONS']
+        AllowHeaders: ['Content-Type']
+
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: api/
+      Handler: dist/lambda.handler
+      Events:
+        Health:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref SaralHttpApi
+            Path: /health
+            Method: GET
+        Explain:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref SaralHttpApi
+            Path: /explain
+            Method: POST
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ResultsTable
+        - S3CrudPolicy:
+            BucketName: !Ref UploadsBucket
+        - Statement:
+            - Effect: Allow
+              Action: bedrock:InvokeModel
+              Resource: !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/anthropic.claude-sonnet-*'
+
+  UploadsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireUploadsAfter24h
+            Status: Enabled
+            ExpirationInDays: 1
+
+  ResultsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: saral-results
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+
+Outputs:
+  ApiUrl:
+    Description: Base URL of the HTTP API
+    Value: !Sub 'https://${SaralHttpApi}.execute-api.${AWS::Region}.amazonaws.com/'
+  UploadsBucketName:
+    Value: !Ref UploadsBucket
+  ResultsTableName:
+    Value: !Ref ResultsTable
