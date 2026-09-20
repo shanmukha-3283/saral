@@ -25,9 +25,8 @@ with `tsx` (no container needed) — local-first rule still satisfied.
 sam build                          # from repo root (template.yaml)
 sam validate --lint                # catch template errors early
 sam local start-api --port 3001    # local API Gateway; test POST /explain
-sam deploy --guided --region us-east-1 --stack-name saral \
-  --capabilities CAPABILITY_IAM    # first deploy; saves samconfig.toml
-sam deploy                         # later deploys reuse samconfig.toml
+sam deploy --stack-name saral --region us-east-1 --capabilities CAPABILITY_IAM \
+  --resolve-s3 --parameter-overrides "GeminiApiKey=$(sed -n 's/^GEMINI_API_KEY=//p' api/.env)"
 ```
 
 ## template.yaml must-haves
@@ -35,7 +34,9 @@ sam deploy                         # later deploys reuse samconfig.toml
 - `Transform: AWS::Serverless-2016-10-31`
 - Lambda: Node 22 runtime, `POST /explain` via HttpApi event.
 - S3 uploads bucket with lifecycle rule `ExpirationInDays: 1` (24h).
-- DynamoDB table `saral-results` (partition key `id`, on-demand billing).
+- DynamoDB tables `saral-results` (partition key `id`, on-demand billing)
+  and `saral-cache` (partition key `docHash`, TTL on `expiresAt`, 7 days).
+  Attach each with a SAM `DynamoDBCrudPolicy` (covers Get/Put/Scan).
 - Lambda execution role: least privilege — `s3:PutObject/GetObject`
   (uploads bucket only), `dynamodb:PutItem/GetItem` (results table only).
   No Bedrock policy: the model call goes to Google Gemini over HTTPS;

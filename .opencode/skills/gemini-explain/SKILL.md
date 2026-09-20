@@ -6,9 +6,11 @@ description: Saral's Gemini integration — call generateContent with a document
 # Gemini Explain (`POST /explain`)
 
 Provider: Google Gemini REST API (direct HTTPS from Lambda/local, no SDK).
-Model default: `gemini-3.7-flash` (vision + structured JSON; verified live
-2026-09-19). Override via `GEMINI_MODEL` env var (`gemini-3.6-flash` also
-live but 503-prone under load; `gemini-2.5-flash` retired for new users).
+Model default: failover list `gemini-3.7-flash,gemini-3.6-flash,gemini-3.8-flash`
+(first healthy model on 503/429 wins; override via `GEMINI_MODEL` env —
+single id or comma list; `gemini-2.5-flash` retired for new users).
+Response header carries the winning model in `modelId`; repeat
+document+language replays from `saral-cache` (`cached: true`, 7-day TTL).
 Auth: `x-goog-api-key: <GEMINI_API_KEY>` header.
 
 Endpoint: `POST https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent`
@@ -37,8 +39,8 @@ Endpoint: `POST https://generativelanguage.googleapis.com/v1beta/models/{model}:
 - Multimodal message: text prompt + file bytes — JPEG/PNG photos or a PDF
   document (`%PDF-` magic → `application/pdf`). Inline data keeps total
   request < 20 MB — our 5 MB cap is fine (and fits the API Gateway body limit).
-- `language` param (`te`/`hi`/`en`) selects output language. Telugu and
-  Hindi answers in native script. `draft_reply` is always in the SAME
+- `language` param (`te`/`hi`/`en`/`mr`/`ta`) selects output language. Answers
+  in native script. `draft_reply` is always in the SAME
   language the user picked.
 - Structured output: `response_schema` enforces exactly
   `{summary, what_it_means, actions[{step, deadline}], draft_reply}`.
@@ -46,18 +48,37 @@ Endpoint: `POST https://generativelanguage.googleapis.com/v1beta/models/{model}:
   none — coerced to `null` in code). Never invent dates, names, or
   reference numbers.
 - Parse defensively anyway: strip fences if present, `JSON.parse`, validate
-  all four keys, retry once with "return valid JSON only" on failure.
+  all four keys; a malformed answer gets one strict-JSON retry per model, then
+  failover moves to the next model.
 - Answer lives at `candidates[0].content.parts[].text` (joined). Non-2xx
   from Google → throw; `app.ts` maps it to 502. Missing `GEMINI_API_KEY`
   → throw (500, fail fast).
-- Client timeout 55s (`AbortSignal.timeout`); Lambda `Timeout: 60`.
+- Client timeout 20s per attempt (`AbortSignal.timeout`); failover budget
+  22s + one 3s-paused second pass, inside the ~30s API Gateway ceiling.
+  Lambda `Timeout: 60`.
 
 ## DynamoDB (`saral-results`, on-demand)
 
 Partition key `id` (uuid). Item: `id, createdAt (ISO), language,
-summary, what_it_means, actions[], draft_reply, imageKey, modelId`.
-`PutItem` on every successful explain; never store raw image bytes in DDB
-(only the S3 `imageKey`).
+summary, what_it_means, actions[], draft_reply, imageKey, modelId, cached`.
+`PutItem` on every fresh explain; document bytes go to the uploads S3
+bucket (`PutObject <id>.<png|jpg|pdf>`, 24h lifecycle), never to DDB.
+
+## Cache (`saral-cache`, on-demand, 7-day TTL on `expiresAt`)
+
+Partition key `docHash` = sha256(`language:base64(doc)`). `GetItem` before
+any model call; hit returns the stored row with `cached: true` (~1s).
+Writes are best-effort (a miss just means "call the model"). Local dev
+without the table degrades to always-fresh. Managed by the same SAM
+`DynamoDBCrudPolicy` pattern; frontend chips it as "Served instantly from
+saved result".
+
+## History (`GET /results`, `GET /results/:id`)
+
+- `GET /results` → `{items}` (recent 20, Scan+sort; serves the
+  "Previous explanations" panel).
+- `GET /results/:id` → the item or 404.
+- Both registered at `/…` and `/api/…` paths in `app.ts` + `template.yaml`.
 
 ## Env vars (placeholders in `.env.example`, never real values)
 

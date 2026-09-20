@@ -1,9 +1,10 @@
 # Saral — official documents, explained in your language
 
-Upload a photo or PDF of an official document, pick Telugu / Hindi / English, and get
-back a simple explanation: what it says, what it means for you, what to do
-next (with deadlines), plus a ready-to-send draft reply. Results are saved
-for later. Mobile-first, one screen, with read-aloud.
+Upload a photo or PDF of an official document, pick Telugu / Hindi / English /
+Marathi / Tamil, and get back a simple explanation: what it says, what it
+means for you, what to do next (with deadlines), plus a ready-to-send draft
+reply. Results are saved (and cached) for later. Mobile-first, one screen,
+with read-aloud and a previous-explanations panel.
 
 ## Try it (live)
 
@@ -17,9 +18,34 @@ for later. Mobile-first, one screen, with read-aloud.
 - Frontend: React + Vite + Tailwind + shadcn/ui (`web/`)
 - Backend: Hono (TypeScript) on AWS Lambda (`api/`)
 - Infra (AWS SAM, `template.yaml`): API Gateway (HTTP API), Lambda, S3
-  (uploads, 24h lifecycle), DynamoDB (`saral-results`)
-- Model: Google Gemini (`gemini-3.7-flash`, vision + structured JSON via
-  direct REST; free AI Studio key in `GEMINI_API_KEY`)
+  (uploads with 24h lifecycle + static-website hosting), DynamoDB
+  (`saral-results` + `saral-cache` with 7-day TTL)
+- Model: Google Gemini (`gemini-3.7-flash` first, automatic failover to
+  `gemini-3.6-flash` / `gemini-3.8-flash` on 503/429; vision + structured
+  JSON via direct REST; free AI Studio key in `GEMINI_API_KEY`)
+
+## Architecture
+
+```mermaid
+flowchart LR
+    U[Phone browser] -->|static site| W[S3 WebBucket]
+    U -->|POST /explain, GET /results| A[API Gateway HTTP API]
+    A --> L[Lambda: Hono app]
+    L -->|cache check / write| C[(DynamoDB saral-cache\n7-day TTL)]
+    L -->|failover 3.7 → 3.6 → 3.8| G[Google Gemini\nvision + JSON mode]
+    L -->|PutItem result| R[(DynamoDB saral-results)]
+    L -->|PutObject| S[S3 UploadsBucket\n24h lifecycle]
+```
+
+## Demo script (60 seconds)
+
+1. Open the app, upload `api/test/scheme-notice.png`.
+2. Pick **Telugu**, hit **Explain my document** — summary, deadlines,
+   draft reply appear (note the model in the response if you curl it).
+3. Hit **Explain again** in **Marathi** — repeat uploads are served
+   instantly from the saved result (`cached: true`).
+4. Scroll to **Previous explanations** — every result persists in DynamoDB
+   and re-opens in one tap.
 
 ## Run locally
 
