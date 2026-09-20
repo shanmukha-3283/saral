@@ -2,7 +2,7 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb'
 import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb'
 import { randomUUID } from 'node:crypto'
 
-export type Language = 'te' | 'hi' | 'en'
+export type Language = 'te' | 'hi' | 'en' | 'mr' | 'ta'
 
 export interface ExplainAction {
   step: string
@@ -24,6 +24,8 @@ const LANGUAGE_NAMES: Record<Language, string> = {
   te: 'Telugu (తెలుగు)',
   hi: 'Hindi (हिन्दी)',
   en: 'English',
+  mr: 'Marathi (मराठी)',
+  ta: 'Tamil (தமிழ்)',
 }
 
 const region = process.env.AWS_REGION ?? 'us-east-1'

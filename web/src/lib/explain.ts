@@ -1,6 +1,6 @@
 // Typed client for POST /api/explain (dev: Vite proxy, prod: CloudFront /api/*).
 
-export type Language = 'te' | 'hi' | 'en'
+export type Language = 'te' | 'hi' | 'en' | 'mr' | 'ta'
 
 export interface ExplainAction {
   step: string
@@ -22,6 +22,8 @@ export const LANGUAGES: { value: Language; label: string; speech: string }[] = [
   { value: 'te', label: 'తెలుగు', speech: 'te-IN' },
   { value: 'hi', label: 'हिन्दी', speech: 'hi-IN' },
   { value: 'en', label: 'English', speech: 'en-IN' },
+  { value: 'mr', label: 'मराठी', speech: 'mr-IN' },
+  { value: 'ta', label: 'தமிழ்', speech: 'ta-IN' },
 ]
 
 export const MAX_FILE_BYTES = 5 * 1024 * 1024
