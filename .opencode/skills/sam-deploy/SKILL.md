@@ -1,6 +1,6 @@
 ---
 name: sam-deploy
-description: Build, validate, test locally, and deploy Saral's AWS SAM stack (Lambda, API Gateway, S3, DynamoDB, CloudFront) including the podman container workaround. Use when running sam build, sam local, sam deploy, editing template.yaml, or debugging Lambda/API Gateway/S3/DynamoDB/CloudFront issues.
+description: Build, validate, test locally, and deploy Saral's AWS SAM stack (Lambda, API Gateway, S3, DynamoDB, S3 static-website hosting) including the podman container workaround. Use when running sam build, sam local, sam deploy, editing template.yaml, or debugging Lambda/API Gateway/S3/DynamoDB issues.
 ---
 
 # SAM Deploy
@@ -41,7 +41,15 @@ sam deploy                         # later deploys reuse samconfig.toml
   No Bedrock policy: the model call goes to Google Gemini over HTTPS;
   the key arrives via the `GeminiApiKey` SAM parameter
   (`sam deploy --parameter-overrides GeminiApiKey=...`).
-- CloudFront distribution in front of `web/` build output (S3 origin).
+- CloudFront is BLOCKED on this account (new distributions need account
+  verification, like Bedrock). Frontend is served from the S3 `WebBucket`
+  static-website endpoint (public-read bucket policy) and calls the API URL
+  directly via the `VITE_API_BASE` build var — see README Deploy section.
+- Lambda packaging gotcha: `api/package.json` must NOT set `"type": "module"`.
+  The Node22 runtime loads handlers via ESM `import()`, which cannot see named
+  exports in esbuild's CJS bundle (`module.exports = __toCommonJS(...)`
+  defeats cjs-module-lexer → `Runtime.HandlerNotFound`). Keep the bundle
+  plain CJS `dist/lambda.js` with `Handler: dist/lambda.handler`.
 
 ## Troubleshooting
 

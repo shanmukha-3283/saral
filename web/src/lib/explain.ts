@@ -69,7 +69,9 @@ export async function explainDocument(
   language: Language,
   signal?: AbortSignal,
 ): Promise<ExplainResult> {
-  const res = await fetch('/api/explain', {
+  const base = (import.meta.env.VITE_API_BASE ?? '').replace(/\/$/, '')
+  const url = base ? `${base}/explain` : '/api/explain'
+  const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ imageBase64, language }),

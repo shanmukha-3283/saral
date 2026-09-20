@@ -53,6 +53,29 @@ Resources:
         - S3CrudPolicy:
             BucketName: !Ref UploadsBucket
 
+  WebBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: index.html
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: false
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: false
+
+  WebBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref WebBucket
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal: '*'
+            Action: s3:GetObject
+            Resource: !Sub '${WebBucket.Arn}/*'
+
   UploadsBucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -78,6 +101,12 @@ Outputs:
   ApiUrl:
     Description: Base URL of the HTTP API
     Value: !Sub 'https://${SaralHttpApi}.execute-api.${AWS::Region}.amazonaws.com/'
+  WebUrl:
+    Description: Production URL of the web app (S3 static website)
+    Value: !GetAtt WebBucket.WebsiteURL
+  WebBucketName:
+    Description: S3 bucket hosting the web build
+    Value: !Ref WebBucket
   UploadsBucketName:
     Value: !Ref UploadsBucket
   ResultsTableName:

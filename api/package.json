@@ -2,7 +2,6 @@
   "name": "saral-api",
   "private": true,
   "version": "0.1.0",
-  "type": "module",
   "scripts": {
     "dev": "tsx watch src/local.ts",
     "build": "esbuild src/lambda.ts --bundle --platform=node --target=node22 --format=cjs --outfile=dist/lambda.js --external:@aws-sdk/*",

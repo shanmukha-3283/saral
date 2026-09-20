@@ -1,4 +1,4 @@
-import { Hono } from 'hono'
+import { Hono, type Context } from 'hono'
 import { cors } from 'hono/cors'
 import { explainDocument, type Language } from './explain'
 
@@ -6,11 +6,12 @@ const app = new Hono()
 
 app.use('*', cors())
 
-app.get('/health', (c) => c.json({ ok: true, service: 'saral-api' }))
-
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
 
-app.post('/explain', async (c) => {
+const healthHandler = (c: Context) =>
+  c.json({ ok: true, service: 'saral-api' })
+
+const explainHandler = async (c: Context) => {
   let body: unknown
   try {
     body = await c.req.json()
@@ -46,6 +47,11 @@ app.post('/explain', async (c) => {
     }
     return c.json({ error: 'explain failed' }, 500)
   }
-})
+}
+
+app.get('/health', healthHandler)
+app.get('/api/health', healthHandler)
+app.post('/explain', explainHandler)
+app.post('/api/explain', explainHandler)
 
 export default app

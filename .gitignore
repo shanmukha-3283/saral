@@ -4,3 +4,5 @@ dist/
 .aws-sam/
 .playwright-mcp/
 .DS_Store
+samconfig.toml
+.scripts/
