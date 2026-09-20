@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "tsx watch src/local.ts",
     "build": "esbuild src/lambda.ts --bundle --platform=node --target=node22 --format=cjs --outfile=dist/lambda.js --external:@aws-sdk/*",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test test/explain.test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.0.0",

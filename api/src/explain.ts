@@ -72,7 +72,7 @@ const RESPONSE_SCHEMA = {
   required: ['summary', 'what_it_means', 'actions', 'draft_reply'],
 } as const
 
-function detectFileType(bytes: Uint8Array): 'image/png' | 'image/jpeg' | 'application/pdf' {
+export function detectFileType(bytes: Uint8Array): 'image/png' | 'image/jpeg' | 'application/pdf' {
   if (bytes[0] === 0x89 && bytes[1] === 0x50) return 'image/png'
   if (bytes[0] === 0xff && bytes[1] === 0xd8) return 'image/jpeg'
   if (
@@ -101,7 +101,7 @@ function buildUserText(language: Language): string {
   ].join(' ')
 }
 
-function coerceActions(value: unknown): ExplainAction[] {
+export function coerceActions(value: unknown): ExplainAction[] {
   if (!Array.isArray(value)) return []
   return value
     .map((item) => {
@@ -115,7 +115,7 @@ function coerceActions(value: unknown): ExplainAction[] {
     .filter((a) => a.step.length > 0)
 }
 
-function parseExplain(
+export function parseExplain(
   text: string,
 ): Omit<ExplainResult, 'id' | 'createdAt' | 'language' | 'modelId'> {
   const cleaned = text

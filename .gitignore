@@ -6,3 +6,6 @@ dist/
 .DS_Store
 samconfig.toml
 .scripts/
+
+# submission artifacts
+submission-live-site.png
