@@ -16,6 +16,7 @@ export interface ExplainResult {
   actions: ExplainAction[]
   draft_reply: string
   modelId: string
+  cached?: boolean
 }
 
 export const LANGUAGES: { value: Language; label: string; speech: string }[] = [

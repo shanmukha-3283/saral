@@ -1,6 +1,10 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb'
-import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb'
-import { randomUUID } from 'node:crypto'
+import {
+  DynamoDBDocumentClient,
+  GetCommand,
+  PutCommand,
+} from '@aws-sdk/lib-dynamodb'
+import { createHash, randomUUID } from 'node:crypto'
 
 export type Language = 'te' | 'hi' | 'en' | 'mr' | 'ta'
 
@@ -18,6 +22,7 @@ export interface ExplainResult {
   actions: ExplainAction[]
   draft_reply: string
   modelId: string
+  cached: boolean
 }
 
 const LANGUAGE_NAMES: Record<Language, string> = {
@@ -29,8 +34,19 @@ const LANGUAGE_NAMES: Record<Language, string> = {
 }
 
 const region = process.env.AWS_REGION ?? 'us-east-1'
-const modelId = process.env.GEMINI_MODEL ?? 'gemini-3.7-flash'
+// Comma-separated failover list: first healthy model wins.
+const DEFAULT_MODELS =
+  'gemini-3.7-flash,gemini-3.6-flash,gemini-3.8-flash'
+const modelIds = (process.env.GEMINI_MODEL ?? DEFAULT_MODELS)
+  .split(',')
+  .map((s) => s.trim())
+  .filter((s) => s.length > 0)
 const tableName = process.env.RESULTS_TABLE ?? 'saral-results'
+const cacheTable = process.env.CACHE_TABLE ?? 'saral-cache'
+const ATTEMPT_TIMEOUT_MS = 20_000
+const FAILOVER_PAUSE_MS = 3_000
+// Stay ahead of the API Gateway ~30s integration ceiling.
+const FAILOVER_BUDGET_MS = 22_000
 
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({ region }))
 
@@ -117,7 +133,7 @@ export function coerceActions(value: unknown): ExplainAction[] {
 
 export function parseExplain(
   text: string,
-): Omit<ExplainResult, 'id' | 'createdAt' | 'language' | 'modelId'> {
+): Omit<ExplainResult, 'id' | 'createdAt' | 'language' | 'modelId' | 'cached'> {
   const cleaned = text
     .replace(/^```(?:json)?\s*/i, '')
     .replace(/\s*```\s*$/, '')
@@ -143,10 +159,15 @@ interface GeminiPart {
   inline_data?: { mime_type: string; data: string }
 }
 
-async function generate(imageB64: string, mime: string, userText: string): Promise<string> {
+async function generate(
+  model: string,
+  imageB64: string,
+  mime: string,
+  userText: string,
+): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) throw new Error('GEMINI_API_KEY is not set')
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent`
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'x-goog-api-key': apiKey, 'Content-Type': 'application/json' },
@@ -168,7 +189,7 @@ async function generate(imageB64: string, mime: string, userText: string): Promi
         temperature: 0.2,
       },
     }),
-    signal: AbortSignal.timeout(55_000),
+    signal: AbortSignal.timeout(ATTEMPT_TIMEOUT_MS),
   })
   if (!res.ok) {
     const errBody = (await res.text()).slice(0, 300)
@@ -186,6 +207,79 @@ async function generate(imageB64: string, mime: string, userText: string): Promi
   return text
 }
 
+export function docHashFor(imageB64: string, language: Language): string {
+  return createHash('sha256').update(`${language}:${imageB64}`).digest('hex')
+}
+
+async function getCached(
+  docHash: string,
+): Promise<ExplainResult | null> {
+  try {
+    const out = await ddb.send(
+      new GetCommand({ TableName: cacheTable, Key: { docHash } }),
+    )
+    const item = out.Item as ExplainResult | undefined
+    if (!item?.summary) return null
+    return { ...item, cached: true }
+  } catch {
+    return null // cache is best-effort; a miss here just means "call the model"
+  }
+}
+
+async function putCached(result: ExplainResult, docHash: string) {
+  try {
+    await ddb.send(
+      new PutCommand({
+        TableName: cacheTable,
+        Item: {
+          ...result,
+          docHash,
+          expiresAt: Math.floor(Date.now() / 1000) + 7 * 24 * 3600,
+        },
+      }),
+    )
+  } catch (err) {
+    console.error('cache write failed (non-fatal):', err)
+  }
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+export async function attemptModel(
+  model: string,
+  imageB64: string,
+  mime: string,
+  userText: string,
+): Promise<{
+  parsed: ReturnType<typeof parseExplain>
+  model: string
+}> {
+  try {
+    return {
+      parsed: parseExplain(await generate(model, imageB64, mime, userText)),
+      model,
+    }
+  } catch (err) {
+    // A malformed-JSON answer may succeed with a stricter instruction.
+    if (err instanceof SyntaxError || /missing required keys/i.test(String(err))) {
+      return {
+        parsed: parseExplain(
+          await generate(
+            model,
+            imageB64,
+            mime,
+            `${userText} Reply with ONLY the JSON object, no other text.`,
+          ),
+        ),
+        model,
+      }
+    }
+    throw err
+  }
+}
+
 export async function explainDocument(
   imageBytes: Uint8Array,
   language: Language,
@@ -194,27 +288,45 @@ export async function explainDocument(
   const imageB64 = Buffer.from(imageBytes).toString('base64')
   const userText = buildUserText(language)
 
-  let parsed
-  try {
-    parsed = parseExplain(await generate(imageB64, mime, userText))
-  } catch {
-    // One retry, asking strictly for JSON.
-    parsed = parseExplain(
-      await generate(
-        imageB64,
-        mime,
-        `${userText} Reply with ONLY the JSON object, no other text.`,
-      ),
-    )
-  }
+  const cached = await getCached(docHashFor(imageB64, language))
+  if (cached) return cached
 
-  const result: ExplainResult = {
-    id: randomUUID(),
-    createdAt: new Date().toISOString(),
-    language,
-    ...parsed,
-    modelId,
+  // Failover across models (first healthy one wins), one extra pass after a
+  // short pause — bounded so a hung call can't outlive the API Gateway
+  // ~30s integration ceiling.
+  const deadline = Date.now() + FAILOVER_BUDGET_MS
+  const failures: string[] = []
+  for (let round = 0; round < 2; round++) {
+    for (const model of modelIds) {
+      try {
+        const { parsed, model: used } = await attemptModel(
+          model,
+          imageB64,
+          mime,
+          userText,
+        )
+        const result: ExplainResult = {
+          id: randomUUID(),
+          createdAt: new Date().toISOString(),
+          language,
+          ...parsed,
+          modelId: used,
+          cached: false,
+        }
+        await putCached(result, docHashFor(imageB64, language))
+        await ddb.send(
+          new PutCommand({ TableName: tableName, Item: result }),
+        )
+        return result
+      } catch (err) {
+        failures.push(`${model}: ${err instanceof Error ? err.message : err}`)
+        console.error(`explain attempt failed on ${model}:`, err)
+      }
+    }
+    if (Date.now() > deadline) break
+    await sleep(FAILOVER_PAUSE_MS)
   }
-  await ddb.send(new PutCommand({ TableName: tableName, Item: result }))
-  return result
+  throw new Error(
+    `gemini request failed on all models: ${failures.at(-1) ?? 'unknown error'}`,
+  )
 }

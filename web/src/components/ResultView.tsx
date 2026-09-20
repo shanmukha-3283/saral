@@ -91,6 +91,11 @@ export default function ResultView({ result }: { result: ExplainResult }) {
 
   return (
     <div className="space-y-4" aria-live="polite">
+      {result.cached && (
+        <Badge variant="secondary" className="w-fit">
+          Served instantly from saved result
+        </Badge>
+      )}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-lg">Summary</CardTitle>

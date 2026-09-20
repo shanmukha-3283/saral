@@ -16,8 +16,9 @@ Globals:
     Environment:
       Variables:
         RESULTS_TABLE: !Ref ResultsTable
+        CACHE_TABLE: !Ref CacheTable
         UPLOADS_BUCKET: !Ref UploadsBucket
-        GEMINI_MODEL: gemini-3.7-flash
+        GEMINI_MODEL: gemini-3.7-flash,gemini-3.6-flash,gemini-3.8-flash
         GEMINI_API_KEY: !Ref GeminiApiKey
 
 Resources:
@@ -50,6 +51,8 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref ResultsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CacheTable
         - S3CrudPolicy:
             BucketName: !Ref UploadsBucket
 
@@ -97,6 +100,21 @@ Resources:
         - AttributeName: id
           KeyType: HASH
 
+  CacheTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: saral-cache
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: docHash
+          AttributeType: S
+      KeySchema:
+        - AttributeName: docHash
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+
 Outputs:
   ApiUrl:
     Description: Base URL of the HTTP API
@@ -111,3 +129,5 @@ Outputs:
     Value: !Ref UploadsBucket
   ResultsTableName:
     Value: !Ref ResultsTable
+  CacheTableName:
+    Value: !Ref CacheTable

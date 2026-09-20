@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {
   coerceActions,
   detectFileType,
+  docHashFor,
   parseExplain,
 } from '../src/explain'
 
@@ -79,5 +80,52 @@ describe('parseExplain', () => {
       /missing required keys/,
     )
     assert.throws(() => parseExplain('not json'), SyntaxError)
+  })
+})
+
+describe('docHashFor', () => {
+  it('is stable and separates languages', () => {
+    const a = docHashFor('aGk=', 'te')
+    assert.equal(a, docHashFor('aGk=', 'te'))
+    assert.equal(a.length, 64)
+    assert.notEqual(a, docHashFor('aGk=', 'hi'))
+    assert.notEqual(a, docHashFor('aGs=', 'te'))
+  })
+})
+
+describe('model failover (attemptModel)', () => {
+  const good = JSON.stringify({
+    summary: 's',
+    what_it_means: 'm',
+    actions: [],
+    draft_reply: 'r',
+  })
+  const restore = globalThis.fetch
+
+  it('fails over to the next model and reports which one served', async (ctx) => {
+    ctx.after(() => {
+      globalThis.fetch = restore
+    })
+    process.env.GEMINI_API_KEY = 'test-key'
+    globalThis.fetch = (async (url: string | URL | Request) => {
+      if (String(url).includes('gemini-3.7-flash')) {
+        return new Response('busy', { status: 503 })
+      }
+      return new Response(
+        JSON.stringify({
+          candidates: [{ content: { parts: [{ text: good }] } }],
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      )
+    }) as typeof fetch
+    const { attemptModel } = await import('../src/explain')
+    await assert.rejects(
+      () => attemptModel('gemini-3.7-flash', 'aGk=', 'image/png', 'hi'),
+      /gemini request failed \(503\)/,
+    )
+    const ok = await attemptModel('gemini-3.6-flash', 'aGk=', 'image/png', 'hi')
+    assert.equal(ok.model, 'gemini-3.6-flash')
+    assert.equal(ok.parsed.summary, 's')
+    delete process.env.GEMINI_API_KEY
   })
 })
