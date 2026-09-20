@@ -3,7 +3,9 @@ import {
   DynamoDBDocumentClient,
   GetCommand,
   PutCommand,
+  ScanCommand,
 } from '@aws-sdk/lib-dynamodb'
+import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { createHash, randomUUID } from 'node:crypto'
 
 export type Language = 'te' | 'hi' | 'en' | 'mr' | 'ta'
@@ -23,6 +25,7 @@ export interface ExplainResult {
   draft_reply: string
   modelId: string
   cached: boolean
+  imageKey: string | null
 }
 
 const LANGUAGE_NAMES: Record<Language, string> = {
@@ -43,12 +46,14 @@ const modelIds = (process.env.GEMINI_MODEL ?? DEFAULT_MODELS)
   .filter((s) => s.length > 0)
 const tableName = process.env.RESULTS_TABLE ?? 'saral-results'
 const cacheTable = process.env.CACHE_TABLE ?? 'saral-cache'
+const uploadsBucket = process.env.UPLOADS_BUCKET ?? ''
 const ATTEMPT_TIMEOUT_MS = 20_000
 const FAILOVER_PAUSE_MS = 3_000
 // Stay ahead of the API Gateway ~30s integration ceiling.
 const FAILOVER_BUDGET_MS = 22_000
 
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({ region }))
+const s3 = new S3Client({ region })
 
 // Strict JSON schema for the Gemini response — guarantees the saral contract.
 const RESPONSE_SCHEMA = {
@@ -133,7 +138,10 @@ export function coerceActions(value: unknown): ExplainAction[] {
 
 export function parseExplain(
   text: string,
-): Omit<ExplainResult, 'id' | 'createdAt' | 'language' | 'modelId' | 'cached'> {
+): Omit<
+  ExplainResult,
+  'id' | 'createdAt' | 'language' | 'modelId' | 'cached' | 'imageKey'
+> {
   const cleaned = text
     .replace(/^```(?:json)?\s*/i, '')
     .replace(/\s*```\s*$/, '')
@@ -243,6 +251,54 @@ async function putCached(result: ExplainResult, docHash: string) {
   }
 }
 
+function extFor(mime: string): string {
+  if (mime === 'image/png') return 'png'
+  if (mime === 'image/jpeg') return 'jpg'
+  return 'pdf'
+}
+
+async function storeUpload(
+  id: string,
+  mime: string,
+  bytes: Uint8Array,
+): Promise<string | null> {
+  if (!uploadsBucket) return null // local dev without a bucket: skip
+  const key = `${id}.${extFor(mime)}`
+  try {
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: uploadsBucket,
+        Key: key,
+        Body: bytes,
+        ContentType: mime,
+      }),
+    )
+    return key
+  } catch (err) {
+    console.error('upload failed (non-fatal):', err)
+    return null
+  }
+}
+
+export async function getResult(id: string): Promise<ExplainResult | null> {
+  const out = await ddb.send(
+    new GetCommand({ TableName: tableName, Key: { id } }),
+  )
+  const item = out.Item as ExplainResult | undefined
+  return item?.summary ? item : null
+}
+
+export async function listRecent(limit = 20): Promise<ExplainResult[]> {
+  const out = await ddb.send(
+    new ScanCommand({ TableName: tableName, Limit: 50 }),
+  )
+  const items = ((out.Items ?? []) as ExplainResult[]).filter(
+    (i) => typeof i?.summary === 'string',
+  )
+  items.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+  return items.slice(0, limit)
+}
+
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
@@ -305,13 +361,15 @@ export async function explainDocument(
           mime,
           userText,
         )
+        const id = randomUUID()
         const result: ExplainResult = {
-          id: randomUUID(),
+          id,
           createdAt: new Date().toISOString(),
           language,
           ...parsed,
           modelId: used,
           cached: false,
+          imageKey: await storeUpload(id, mime, imageBytes),
         }
         await putCached(result, docHashFor(imageB64, language))
         await ddb.send(

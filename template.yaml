@@ -48,6 +48,18 @@ Resources:
             ApiId: !Ref SaralHttpApi
             Path: /explain
             Method: POST
+        Results:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref SaralHttpApi
+            Path: /results
+            Method: GET
+        ResultOne:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref SaralHttpApi
+            Path: /results/{id}
+            Method: GET
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref ResultsTable

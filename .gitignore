@@ -8,4 +8,4 @@ samconfig.toml
 .scripts/
 
 # submission artifacts
-submission-live-site.png
+submission-*.png

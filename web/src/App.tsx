@@ -6,6 +6,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import FilePicker from '@/components/FilePicker'
+import HistoryList from '@/components/HistoryList'
 import LanguagePicker from '@/components/LanguagePicker'
 import ResultView from '@/components/ResultView'
 import {
@@ -13,6 +14,8 @@ import {
   explainDocument,
   fileToBase64,
   friendlyError,
+  getResult,
+  getResults,
   isAcceptedFile,
   type ExplainResult,
   type Language,
@@ -27,7 +30,20 @@ export default function App() {
   const [status, setStatus] = useState<Status>('idle')
   const [result, setResult] = useState<ExplainResult | null>(null)
   const [error, setError] = useState<string>('')
+  const [history, setHistory] = useState<ExplainResult[]>([])
   const abortRef = useRef<AbortController | null>(null)
+
+  const refreshHistory = async () => {
+    try {
+      setHistory(await getResults())
+    } catch {
+      // history is a bonus; a failure here must not break the main flow
+    }
+  }
+
+  useEffect(() => {
+    void refreshHistory()
+  }, [])
 
   useEffect(() => {
     if (!file || !file.type.startsWith('image/')) {
@@ -73,6 +89,7 @@ export default function App() {
       setResult(explained)
       setLanguage(targetLang)
       setStatus('success')
+      void refreshHistory()
     } catch (err) {
       if (controller.signal.aborted) return
       setError(friendlyError(err))
@@ -86,6 +103,20 @@ export default function App() {
     setResult(null)
     setError('')
     setStatus('idle')
+  }
+
+  const openSaved = async (id: string) => {
+    setStatus('loading')
+    setError('')
+    try {
+      const saved = await getResult(id)
+      setResult(saved)
+      setLanguage(saved.language)
+      setStatus('success')
+    } catch (err) {
+      setError(friendlyError(err))
+      setStatus('error')
+    }
   }
 
   const loading = status === 'loading'
@@ -166,10 +197,13 @@ export default function App() {
         </Alert>
       )}
 
+      {!loading && status !== 'success' && (
+        <HistoryList items={history} onSelect={(id) => void openSaved(id)} />
+      )}
+
       {status === 'success' && result && (
         <>
-          <ResultView result={result} />
-          <div className="space-y-3 rounded-lg border p-4">
+          <ResultView result={result} />          <div className="space-y-3 rounded-lg border p-4">
             <p className="text-sm font-medium">
               Explain the same document in another language
             </p>
@@ -200,6 +234,7 @@ export default function App() {
               Start over with a new document
             </Button>
           </div>
+          <HistoryList items={history} onSelect={(id) => void openSaved(id)} />
         </>
       )}
 

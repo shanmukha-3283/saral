@@ -17,6 +17,7 @@ export interface ExplainResult {
   draft_reply: string
   modelId: string
   cached?: boolean
+  imageKey?: string | null
 }
 
 export const LANGUAGES: { value: Language; label: string; speech: string }[] = [
@@ -67,12 +68,16 @@ export class ExplainError extends Error {
   }
 }
 
+function apiBase(): string {
+  return (import.meta.env.VITE_API_BASE ?? '').replace(/\/$/, '')
+}
+
 export async function explainDocument(
   imageBase64: string,
   language: Language,
   signal?: AbortSignal,
 ): Promise<ExplainResult> {
-  const base = (import.meta.env.VITE_API_BASE ?? '').replace(/\/$/, '')
+  const base = apiBase()
   const url = base ? `${base}/explain` : '/api/explain'
   const res = await fetch(url, {
     method: 'POST',
@@ -91,6 +96,32 @@ export async function explainDocument(
       res.status,
     )
   }
+  return data as ExplainResult
+}
+
+export async function getResults(
+  signal?: AbortSignal,
+): Promise<ExplainResult[]> {
+  const base = apiBase()
+  const url = base ? `${base}/results` : '/api/results'
+  const res = await fetch(url, { signal })
+  const data = (await res.json().catch(() => ({}))) as {
+    items?: ExplainResult[]
+  }
+  if (!res.ok) throw new ExplainError('Could not load saved results.', res.status)
+  return Array.isArray(data.items) ? data.items : []
+}
+
+export async function getResult(
+  id: string,
+  signal?: AbortSignal,
+): Promise<ExplainResult> {
+  const base = apiBase()
+  const url = base ? `${base}/results/${id}` : `/api/results/${id}`
+  const res = await fetch(url, { signal })
+  const data = (await res.json().catch(() => ({}))) as Partial<ExplainResult>
+  if (res.status === 404) throw new ExplainError('Saved result not found.', 404)
+  if (!res.ok) throw new ExplainError('Could not load saved result.', res.status)
   return data as ExplainResult
 }
 

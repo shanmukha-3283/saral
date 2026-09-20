@@ -1,6 +1,11 @@
 import { Hono, type Context } from 'hono'
 import { cors } from 'hono/cors'
-import { explainDocument, type Language } from './explain'
+import {
+  explainDocument,
+  getResult,
+  listRecent,
+  type Language,
+} from './explain'
 
 const app = new Hono()
 
@@ -59,5 +64,31 @@ app.get('/health', healthHandler)
 app.get('/api/health', healthHandler)
 app.post('/explain', explainHandler)
 app.post('/api/explain', explainHandler)
+
+const listHandler = async (c: Context) => {
+  try {
+    return c.json({ items: await listRecent() })
+  } catch (err) {
+    console.error('list failed:', err)
+    return c.json({ error: 'could not load saved results' }, 500)
+  }
+}
+
+const getOneHandler = async (c: Context) => {
+  const id = c.req.param('id') ?? ''
+  try {
+    const item = await getResult(id)
+    if (!item) return c.json({ error: 'result not found' }, 404)
+    return c.json(item)
+  } catch (err) {
+    console.error('get failed:', err)
+    return c.json({ error: 'could not load saved result' }, 500)
+  }
+}
+
+app.get('/results', listHandler)
+app.get('/api/results', listHandler)
+app.get('/results/:id', getOneHandler)
+app.get('/api/results/:id', getOneHandler)
 
 export default app
