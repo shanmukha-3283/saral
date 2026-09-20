@@ -5,6 +5,13 @@ back a simple explanation: what it says, what it means for you, what to do
 next (with deadlines), plus a ready-to-send draft reply. Results are saved
 for later. Mobile-first, one screen, with read-aloud.
 
+## Try it (live)
+
+- App: <http://saral-webbucket-2yeu2um8fl9y.s3-website-us-east-1.amazonaws.com>
+- API health: <https://5kp0hzndc2.execute-api.us-east-1.amazonaws.com/health>
+- Sample test document: `api/test/scheme-notice.png` (PNG) or
+  `api/test/scheme-notice.pdf` (PDF).
+
 ## Stack
 
 - Frontend: React + Vite + Tailwind + shadcn/ui (`web/`)
